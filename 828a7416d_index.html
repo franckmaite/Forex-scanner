@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Forex Chart Scanner — Deriv</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0a0e1a; color: #e0e6f0; min-height: 100vh; }
+
+    header {
+      background: linear-gradient(135deg, #0f1923 0%, #1a2540 100%);
+      border-bottom: 1px solid #1e2d4a;
+      padding: 16px 32px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    header .logo {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, #00e5ff, #0066ff);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; color: #fff; }
+    header span { font-size: 0.8rem; color: #5a7fa8; margin-left: 6px; }
+
+    .main { max-width: 1100px; margin: 0 auto; padding: 32px 20px; }
+
+    .upload-section {
+      background: #0f1923; border: 2px dashed #1e3a5f;
+      border-radius: 18px; padding: 40px; text-align: center;
+      cursor: pointer; transition: all 0.3s; margin-bottom: 28px; position: relative;
+    }
+    .upload-section:hover, .upload-section.dragover { border-color: #00e5ff; background: #0d1e30; }
+    .upload-section input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+    .upload-icon { font-size: 3rem; margin-bottom: 12px; }
+    .upload-section h2 { font-size: 1.2rem; color: #cde; margin-bottom: 8px; }
+    .upload-section p { color: #5a7fa8; font-size: 0.9rem; }
+
+    .controls {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px; margin-bottom: 24px;
+    }
+    .control-group label {
+      display: block; font-size: 0.78rem; color: #5a7fa8;
+      margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .control-group select {
+      width: 100%; background: #0f1923; border: 1px solid #1e3a5f;
+      color: #e0e6f0; padding: 10px 14px; border-radius: 10px;
+      font-size: 0.92rem; outline: none; transition: border 0.2s;
+    }
+    .control-group select:focus { border-color: #00e5ff; }
+
+    .btn-analyze {
+      width: 100%; padding: 16px;
+      background: linear-gradient(135deg, #0055ff, #00c4ff);
+      border: none; border-radius: 14px; color: #fff;
+      font-size: 1.1rem; font-weight: 700; cursor: pointer;
+      letter-spacing: 0.04em; transition: opacity 0.2s, transform 0.1s;
+      margin-bottom: 32px;
+    }
+    .btn-analyze:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    #preview-wrap {
+      display: none; background: #0f1923; border-radius: 14px;
+      padding: 16px; margin-bottom: 24px; border: 1px solid #1e3a5f;
+    }
+    #preview-wrap img {
+      max-width: 100%; border-radius: 10px;
+      max-height: 420px; object-fit: contain; display: block; margin: 0 auto;
+    }
+
+    #result {
+      display: none; border-radius: 18px;
+      padding: 28px 32px; margin-bottom: 28px;
+    }
+    #result.BUY     { background: linear-gradient(135deg, #042a18, #0a4028); border: 1.5px solid #00c56a; }
+    #result.SELL    { background: linear-gradient(135deg, #2a0410, #400a1a); border: 1.5px solid #ff3a5c; }
+    #result.NEUTRAL { background: linear-gradient(135deg, #12181f, #1e2d40); border: 1.5px solid #4a6a8a; }
+
+    .result-top { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
+    .direction-badge {
+      font-size: 2rem; font-weight: 900;
+      padding: 12px 28px; border-radius: 12px; letter-spacing: 0.08em;
+    }
+    .BUY  .direction-badge { background: #00c56a22; color: #00ff8a; border: 1.5px solid #00c56a; }
+    .SELL .direction-badge { background: #ff3a5c22; color: #ff6b85; border: 1.5px solid #ff3a5c; }
+    .NEUTRAL .direction-badge { background: #4a6a8a22; color: #8ab4d8; border: 1.5px solid #4a6a8a; }
+
+    .result-meta { flex: 1; }
+    .result-meta h3 { font-size: 1.1rem; color: #a0b8d0; margin-bottom: 4px; }
+    .result-meta .asset-name { font-size: 1.5rem; font-weight: 700; color: #fff; }
+
+    .confidence-bar-wrap { margin: 14px 0; }
+    .confidence-label { display: flex; justify-content: space-between; font-size: 0.82rem; color: #5a7fa8; margin-bottom: 6px; }
+    .confidence-bar { height: 8px; background: #1a2a3a; border-radius: 99px; overflow: hidden; }
+    .confidence-fill { height: 100%; border-radius: 99px; transition: width 1s ease; }
+    .BUY  .confidence-fill { background: linear-gradient(90deg, #00c56a, #00ff8a); }
+    .SELL .confidence-fill { background: linear-gradient(90deg, #ff3a5c, #ff7a90); }
+    .NEUTRAL .confidence-fill { background: linear-gradient(90deg, #4a6a8a, #8ab4d8); }
+
+    .analysis-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 14px; margin-top: 20px;
+    }
+    .analysis-item {
+      background: #0a1420; border-radius: 12px;
+      padding: 14px 18px; border: 1px solid #1a2a3a;
+    }
+    .analysis-item .ai-label {
+      font-size: 0.75rem; color: #4a6a8a;
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;
+    }
+    .analysis-item .ai-value { font-size: 0.95rem; color: #c0d8f0; line-height: 1.5; }
+
+    /* ── TRADE STYLE TABS ────────────────────────────── */
+    .trade-styles-section {
+      margin-top: 28px;
+    }
+    .trade-styles-title {
+      font-size: 0.85rem; color: #5a7fa8;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .trade-styles-title::after {
+      content: ''; flex: 1; height: 1px; background: #1a2a3a;
+    }
+
+    .style-tabs {
+      display: flex; gap: 10px; margin-bottom: 18px;
+    }
+    .style-tab {
+      flex: 1; padding: 10px; text-align: center;
+      border-radius: 10px; cursor: pointer;
+      border: 1.5px solid #1a2a3a;
+      background: #0a1420; color: #5a7fa8;
+      font-weight: 600; font-size: 0.88rem;
+      transition: all 0.2s;
+    }
+    .style-tab:hover { border-color: #2a4a7a; color: #a0c0e0; }
+    .style-tab.active { border-color: #00c4ff; color: #00c4ff; background: #001a2a; }
+    .style-tab .tab-icon { font-size: 1.3rem; display: block; margin-bottom: 4px; }
+    .style-tab .tab-tf { font-size: 0.7rem; color: #4a6a8a; margin-top: 2px; }
+    .style-tab.active .tab-tf { color: #3a7a9a; }
+
+    .style-panel { display: none; }
+    .style-panel.active { display: block; }
+
+    .rr-badge {
+      display: inline-block;
+      background: #0a2a1a; border: 1px solid #00c56a;
+      color: #00ff8a; border-radius: 8px;
+      padding: 4px 14px; font-size: 0.82rem; font-weight: 700;
+      margin-bottom: 14px;
+    }
+    .rr-badge.sell { background: #2a0a10; border-color: #ff3a5c; color: #ff6b85; }
+    .rr-badge.neutral { background: #12181f; border-color: #4a6a8a; color: #8ab4d8; }
+
+    .ee-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 12px; margin-bottom: 14px;
+    }
+    .ee-card {
+      background: #0a1420; border-radius: 12px;
+      padding: 14px 16px; border: 1px solid #1a2a3a; text-align: center;
+    }
+    .ee-card .ee-label {
+      font-size: 0.72rem; color: #4a6a8a;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    .ee-card .ee-val { font-size: 1.05rem; font-weight: 700; }
+    .ee-card.entry .ee-val { color: #00c4ff; }
+    .ee-card.sl    .ee-val { color: #ff3a5c; }
+    .ee-card.tp1   .ee-val { color: #00c56a; }
+    .ee-card.tp2   .ee-val { color: #00e5a0; }
+    .ee-card.tp3   .ee-val { color: #80ffcc; }
+    .ee-card .ee-sub { font-size: 0.72rem; color: #4a6a8a; margin-top: 3px; }
+
+    .style-note {
+      background: #0a1828; border-radius: 10px;
+      padding: 12px 16px; border-left: 3px solid #00c4ff;
+      font-size: 0.85rem; color: #7a9ab8; line-height: 1.6;
+    }
+
+    /* ── FULL ANALYSIS ── */
+    .full-analysis {
+      margin-top: 20px; background: #0a1420;
+      border-radius: 12px; padding: 18px 20px;
+      border: 1px solid #1a2a3a;
+      font-size: 0.93rem; color: #a0c0e0; line-height: 1.7;
+    }
+    .full-analysis h4 { color: #c0d8f0; margin-bottom: 10px; font-size: 0.95rem; }
+
+    /* ── HISTORY ── */
+    #history-section { margin-top: 32px; }
+    #history-section h3 {
+      font-size: 1rem; color: #5a7fa8; margin-bottom: 14px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .history-list { display: flex; flex-direction: column; gap: 10px; }
+    .history-item {
+      background: #0f1923; border-radius: 12px;
+      padding: 14px 18px; display: flex; align-items: center; gap: 14px;
+      border: 1px solid #1a2a3a;
+    }
+    .history-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .history-dot.BUY  { background: #00c56a; }
+    .history-dot.SELL { background: #ff3a5c; }
+    .history-dot.NEUTRAL { background: #4a6a8a; }
+    .history-info { flex: 1; }
+    .history-info .h-asset { font-weight: 600; color: #c0d8f0; font-size: 0.95rem; }
+    .history-info .h-time  { font-size: 0.78rem; color: #4a6a8a; }
+    .history-dir { font-weight: 700; font-size: 0.9rem; }
+    .history-dir.BUY { color: #00c56a; }
+    .history-dir.SELL { color: #ff3a5c; }
+    .history-dir.NEUTRAL { color: #8ab4d8; }
+    .history-conf { font-size: 0.82rem; color: #4a6a8a; }
+
+    .error-msg {
+      background: #2a0a0a; border: 1px solid #ff3a5c;
+      border-radius: 12px; padding: 16px 20px;
+      color: #ff8a9a; font-size: 0.9rem; margin-bottom: 20px; display: none;
+    }
+
+    /* ── LOADING ── */
+    .loading-overlay {
+      display: none; position: fixed; inset: 0;
+      background: #0a0e1acc; z-index: 999;
+      align-items: center; justify-content: center;
+      flex-direction: column; gap: 18px;
+    }
+    .loading-overlay.show { display: flex; }
+    .spinner {
+      width: 52px; height: 52px;
+      border: 4px solid #1a2a3a; border-top-color: #00c4ff;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { color: #a0c0e0; font-size: 1rem; }
+
+    @media (max-width: 640px) {
+      .controls, .analysis-grid, .ee-grid { grid-template-columns: 1fr; }
+      header { padding: 12px 16px; }
+      .main { padding: 20px 12px; }
+      .style-tabs { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📊</div>
+  <div><h1>Forex Chart Scanner <span>• Deriv</span></h1></div>
+</header>
+
+<div class="main">
+
+  <!-- Upload -->
+  <div class="upload-section" id="upload-area">
+    <input type="file" id="file-input" accept="image/*" />
+    <div class="upload-icon">🖼️</div>
+    <h2>Arraste o gráfico aqui ou clique para selecionar</h2>
+    <p>Suporta PNG, JPG, WEBP • Qualquer timeframe • Powered by IA</p>
+  </div>
+
+  <div id="preview-wrap">
+    <img id="preview-img" src="" alt="Gráfico" />
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="control-group">
+      <label>Ativo</label>
+      <select id="asset-select">
+        <optgroup label="🌍 Forex Major">
+          <option value="EUR/USD">EUR/USD</option>
+          <option value="GBP/USD">GBP/USD</option>
+          <option value="USD/JPY">USD/JPY</option>
+          <option value="USD/CHF">USD/CHF</option>
+          <option value="AUD/USD">AUD/USD</option>
+          <option value="USD/CAD">USD/CAD</option>
+          <option value="NZD/USD">NZD/USD</option>
+        </optgroup>
+        <optgroup label="🌐 Forex Minor">
+          <option value="EUR/GBP">EUR/GBP</option>
+          <option value="EUR/JPY">EUR/JPY</option>
+          <option value="GBP/JPY">GBP/JPY</option>
+          <option value="EUR/AUD">EUR/AUD</option>
+          <option value="EUR/CAD">EUR/CAD</option>
+          <option value="GBP/AUD">GBP/AUD</option>
+          <option value="GBP/CAD">GBP/CAD</option>
+          <option value="AUD/JPY">AUD/JPY</option>
+          <option value="NZD/JPY">NZD/JPY</option>
+          <option value="CAD/JPY">CAD/JPY</option>
+          <option value="CHF/JPY">CHF/JPY</option>
+          <option value="EUR/NZD">EUR/NZD</option>
+          <option value="GBP/NZD">GBP/NZD</option>
+          <option value="AUD/NZD">AUD/NZD</option>
+          <option value="AUD/CAD">AUD/CAD</option>
+          <option value="NZD/CAD">NZD/CAD</option>
+          <option value="CAD/CHF">CAD/CHF</option>
+        </optgroup>
+        <optgroup label="🌴 Exotic">
+          <option value="USD/MXN">USD/MXN</option>
+          <option value="USD/ZAR">USD/ZAR</option>
+          <option value="USD/SGD">USD/SGD</option>
+          <option value="USD/NOK">USD/NOK</option>
+          <option value="USD/SEK">USD/SEK</option>
+          <option value="USD/TRY">USD/TRY</option>
+          <option value="EUR/TRY">EUR/TRY</option>
+          <option value="EUR/ZAR">EUR/ZAR</option>
+          <option value="GBP/ZAR">GBP/ZAR</option>
+        </optgroup>
+        <optgroup label="🤖 Sintéticos Deriv">
+          <option value="Volatility 10 Index">Volatility 10 Index</option>
+          <option value="Volatility 25 Index">Volatility 25 Index</option>
+          <option value="Volatility 50 Index">Volatility 50 Index</option>
+          <option value="Volatility 75 Index">Volatility 75 Index</option>
+          <option value="Volatility 100 Index">Volatility 100 Index</option>
+          <option value="Crash 300 Index">Crash 300 Index</option>
+          <option value="Crash 500 Index">Crash 500 Index</option>
+          <option value="Crash 1000 Index">Crash 1000 Index</option>
+          <option value="Boom 300 Index">Boom 300 Index</option>
+          <option value="Boom 500 Index">Boom 500 Index</option>
+          <option value="Boom 1000 Index">Boom 1000 Index</option>
+          <option value="Step Index">Step Index</option>
+          <option value="Range Break 100">Range Break 100</option>
+          <option value="Range Break 200">Range Break 200</option>
+          <option value="Jump 10 Index">Jump 10 Index</option>
+          <option value="Jump 25 Index">Jump 25 Index</option>
+          <option value="Jump 50 Index">Jump 50 Index</option>
+          <option value="Jump 75 Index">Jump 75 Index</option>
+          <option value="Jump 100 Index">Jump 100 Index</option>
+        </optgroup>
+      </select>
+    </div>
+    <div class="control-group">
+      <label>Timeframe</label>
+      <select id="tf-select">
+        <option value="M1">M1 — 1 Minuto</option>
+        <option value="M5">M5 — 5 Minutos</option>
+        <option value="M15" selected>M15 — 15 Minutos</option>
+        <option value="M30">M30 — 30 Minutos</option>
+        <option value="H1">H1 — 1 Hora</option>
+        <option value="H4">H4 — 4 Horas</option>
+        <option value="D1">D1 — Diário</option>
+        <option value="W1">W1 — Semanal</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label>Tipo de Análise</label>
+      <select id="analysis-type">
+        <option value="completa">Completa (IA + Técnica)</option>
+        <option value="price_action">Price Action</option>
+        <option value="indicadores">Indicadores Técnicos</option>
+        <option value="suporte_resistencia">Suporte & Resistência</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="error-msg" id="error-msg"></div>
+
+  <button class="btn-analyze" id="btn-analyze" disabled>
+    🔍 Analisar Gráfico com IA
+  </button>
+
+  <!-- RESULT -->
+  <div id="result">
+    <!-- Direction + Asset -->
+    <div class="result-top">
+      <div class="direction-badge" id="dir-badge">—</div>
+      <div class="result-meta">
+        <h3 id="res-tf">—</h3>
+        <div class="asset-name" id="res-asset">—</div>
+      </div>
+    </div>
+
+    <!-- Confidence -->
+    <div class="confidence-bar-wrap">
+      <div class="confidence-label">
+        <span>Força do Sinal</span>
+        <span id="conf-pct">—</span>
+      </div>
+      <div class="confidence-bar">
+        <div class="confidence-fill" id="conf-fill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Technical analysis grid -->
+    <div class="analysis-grid">
+      <div class="analysis-item">
+        <div class="ai-label">📈 Tendência</div>
+        <div class="ai-value" id="res-trend">—</div>
+      </div>
+      <div class="analysis-item">
+        <div class="ai-label">🕯️ Padrão de Candle</div>
+        <div class="ai-value" id="res-candle">—</div>
+      </div>
+      <div class="analysis-item">
+        <div class="ai-label">🛡️ Suporte / Resistência</div>
+        <div class="ai-value" id="res-sr">—</div>
+      </div>
+      <div class="analysis-item">
+        <div class="ai-label">⚡ Momentum</div>
+        <div class="ai-value" id="res-momentum">—</div>
+      </div>
+    </div>
+
+    <!-- ── TRADE STYLES ─────────────────────────────── -->
+    <div class="trade-styles-section">
+      <div class="trade-styles-title">Gestão de Risco por Estilo de Trade</div>
+
+      <div class="style-tabs">
+        <div class="style-tab active" onclick="switchTab('scalper')">
+          <span class="tab-icon">⚡</span>
+          Scalper
+          <div class="tab-tf">M1 · M5 · M15</div>
+        </div>
+        <div class="style-tab" onclick="switchTab('swing')">
+          <span class="tab-icon">🌊</span>
+          Swing Trade
+          <div class="tab-tf">H1 · H4 · D1</div>
+        </div>
+        <div class="style-tab" onclick="switchTab('trend')">
+          <span class="tab-icon">🏹</span>
+          Trend Following
+          <div class="tab-tf">H4 · D1 · W1</div>
+        </div>
+      </div>
+
+      <!-- SCALPER -->
+      <div class="style-panel active" id="panel-scalper">
+        <div id="rr-scalper" class="rr-badge">R:R 1:1.5</div>
+        <div class="ee-grid">
+          <div class="ee-card entry">
+            <div class="ee-label">🎯 Entrada</div>
+            <div class="ee-val" id="sc-entry">—</div>
+            <div class="ee-sub">Preço atual</div>
+          </div>
+          <div class="ee-card sl">
+            <div class="ee-label">🛑 Stop Loss</div>
+            <div class="ee-val" id="sc-sl">—</div>
+            <div class="ee-sub">5–8 pips</div>
+          </div>
+          <div class="ee-card tp1">
+            <div class="ee-label">✅ Take Profit</div>
+            <div class="ee-val" id="sc-tp">—</div>
+            <div class="ee-sub">8–12 pips</div>
+          </div>
+        </div>
+        <div class="style-note">
+          ⚡ <strong>Scalper:</strong> Operações rápidas de 2–15 minutos. Foco em volatilidade imediata, spreads baixos e execução veloz. Stop apertado, alvo realista. Ideal para M1, M5 e M15.
+        </div>
+      </div>
+
+      <!-- SWING -->
+      <div class="style-panel" id="panel-swing">
+        <div id="rr-swing" class="rr-badge">R:R 1:2.5</div>
+        <div class="ee-grid">
+          <div class="ee-card entry">
+            <div class="ee-label">🎯 Entrada</div>
+            <div class="ee-val" id="sw-entry">—</div>
+            <div class="ee-sub">Zona de entrada</div>
+          </div>
+          <div class="ee-card sl">
+            <div class="ee-label">🛑 Stop Loss</div>
+            <div class="ee-val" id="sw-sl">—</div>
+            <div class="ee-sub">20–40 pips</div>
+          </div>
+          <div class="ee-card tp1">
+            <div class="ee-label">🥇 TP1</div>
+            <div class="ee-val" id="sw-tp1">—</div>
+            <div class="ee-sub">50% posição</div>
+          </div>
+          <div class="ee-card tp2">
+            <div class="ee-label">🥈 TP2</div>
+            <div class="ee-val" id="sw-tp2">—</div>
+            <div class="ee-sub">30% posição</div>
+          </div>
+          <div class="ee-card tp3">
+            <div class="ee-label">🥉 TP3</div>
+            <div class="ee-val" id="sw-tp3">—</div>
+            <div class="ee-sub">20% posição</div>
+          </div>
+        </div>
+        <div class="style-note">
+          🌊 <strong>Swing Trade:</strong> Operações de 1–5 dias seguindo movimentos de médio prazo. 3 alvos parciais para maximizar lucro. Stop abaixo/acima do último swing. Ideal para H1, H4 e D1.
+        </div>
+      </div>
+
+      <!-- TREND FOLLOWING -->
+      <div class="style-panel" id="panel-trend">
+        <div id="rr-trend" class="rr-badge">R:R 1:4+</div>
+        <div class="ee-grid">
+          <div class="ee-card entry">
+            <div class="ee-label">🎯 Entrada</div>
+            <div class="ee-val" id="tr-entry">—</div>
+            <div class="ee-sub">Pullback na tendência</div>
+          </div>
+          <div class="ee-card sl">
+            <div class="ee-label">🛑 Stop Loss</div>
+            <div class="ee-val" id="tr-sl">—</div>
+            <div class="ee-sub">50–100 pips</div>
+          </div>
+          <div class="ee-card tp1">
+            <div class="ee-label">🥇 TP1</div>
+            <div class="ee-val" id="tr-tp1">—</div>
+            <div class="ee-sub">33% posição</div>
+          </div>
+          <div class="ee-card tp2">
+            <div class="ee-label">🥈 TP2</div>
+            <div class="ee-val" id="tr-tp2">—</div>
+            <div class="ee-sub">33% posição</div>
+          </div>
+          <div class="ee-card tp3">
+            <div class="ee-label">🎯 Alvo Final</div>
+            <div class="ee-val" id="tr-tp3">—</div>
+            <div class="ee-sub">Trailing stop</div>
+          </div>
+        </div>
+        <div class="style-note">
+          🏹 <strong>Trend Following:</strong> Segue a tendência principal por dias ou semanas. Entrada em pullbacks, stop amplo, múltiplos alvos com trailing. Ratio risco/retorno elevado. Ideal para H4, D1 e W1.
+        </div>
+      </div>
+    </div>
+
+    <!-- Full AI analysis -->
+    <div class="full-analysis">
+      <h4>🤖 Análise Detalhada pela IA</h4>
+      <div id="res-full">—</div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div id="history-section" style="display:none">
+    <h3>Histórico de Análises</h3>
+    <div class="history-list" id="history-list"></div>
+  </div>
+
+</div>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">🤖 IA analisando o gráfico...</div>
+</div>
+
+<script>
+  const fileInput      = document.getElementById('file-input');
+  const uploadArea     = document.getElementById('upload-area');
+  const previewWrap    = document.getElementById('preview-wrap');
+  const previewImg     = document.getElementById('preview-img');
+  const btnAnalyze     = document.getElementById('btn-analyze');
+  const resultEl       = document.getElementById('result');
+  const loadingEl      = document.getElementById('loading');
+  const loadingText    = document.getElementById('loading-text');
+  const historySection = document.getElementById('history-section');
+  const historyList    = document.getElementById('history-list');
+  const errorMsg       = document.getElementById('error-msg');
+
+  let currentFile = null;
+  let history = [];
+
+  const loadingMsgs = [
+    '🤖 IA analisando padrões de candle...',
+    '📊 Identificando suporte e resistência...',
+    '📈 Calculando força da tendência...',
+    '⚡ Calculando SL/TP para cada estilo...',
+    '🎯 Gerando sinais de entrada...'
+  ];
+  let loadingInterval;
+
+  // ── TAB SWITCH ──────────────────────────────────────
+  function switchTab(style) {
+    document.querySelectorAll('.style-tab').forEach((t, i) => {
+      t.classList.toggle('active', ['scalper','swing','trend'][i] === style);
+    });
+    document.querySelectorAll('.style-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-' + style).classList.add('active');
+  }
+
+  // ── UPLOAD ──────────────────────────────────────────
+  uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+  uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+  uploadArea.addEventListener('drop', e => {
+    e.preventDefault(); uploadArea.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) handleFile(file);
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+  function handleFile(file) {
+    currentFile = file;
+    previewImg.src = URL.createObjectURL(file);
+    previewWrap.style.display = 'block';
+    btnAnalyze.disabled = false;
+    resultEl.style.display = 'none';
+    errorMsg.style.display = 'none';
+  }
+
+  btnAnalyze.addEventListener('click', analyzeChart);
+
+  // ── ANALYZE ─────────────────────────────────────────
+  async function analyzeChart() {
+    if (!currentFile) return;
+    const asset = document.getElementById('asset-select').value;
+    const tf    = document.getElementById('tf-select').value;
+    const type  = document.getElementById('analysis-type').value;
+
+    errorMsg.style.display = 'none';
+    loadingEl.classList.add('show');
+    btnAnalyze.disabled = true;
+
+    let msgIdx = 0;
+    loadingText.textContent = loadingMsgs[0];
+    loadingInterval = setInterval(() => {
+      msgIdx = (msgIdx + 1) % loadingMsgs.length;
+      loadingText.textContent = loadingMsgs[msgIdx];
+    }, 1800);
+
+    try {
+      const base64 = await fileToBase64(currentFile);
+      const resp = await fetch('https://superagent-056afc9b.base44.app/functions/analyzeChart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64, asset, timeframe: tf, analysisType: type })
+      });
+
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Erro na análise');
+
+      displayResult(data, asset, tf);
+      addHistory(data, asset, tf);
+
+    } catch(err) {
+      errorMsg.textContent = '⚠️ ' + (err.message || 'Erro ao analisar. Tente novamente.');
+      errorMsg.style.display = 'block';
+      console.error(err);
+    } finally {
+      clearInterval(loadingInterval);
+      loadingEl.classList.remove('show');
+      btnAnalyze.disabled = false;
+    }
+  }
+
+  // ── DISPLAY RESULT ──────────────────────────────────
+  function displayResult(data, asset, tf) {
+    const dir  = data.direction;
+    const conf = data.confidence || 80;
+
+    resultEl.className = '';
+    resultEl.classList.add(dir);
+    resultEl.style.display = 'block';
+
+    document.getElementById('dir-badge').textContent =
+      dir === 'BUY' ? '▲ COMPRA' : dir === 'SELL' ? '▼ VENDA' : '◆ NEUTRO';
+    document.getElementById('res-asset').textContent = asset;
+    document.getElementById('res-tf').textContent = `Timeframe: ${tf}`;
+    document.getElementById('conf-pct').textContent = `${conf}%`;
+    setTimeout(() => { document.getElementById('conf-fill').style.width = `${conf}%`; }, 100);
+
+    document.getElementById('res-trend').textContent    = data.trend || '—';
+    document.getElementById('res-candle').textContent   = data.candle || '—';
+    document.getElementById('res-sr').textContent       = data.support_resistance || '—';
+    document.getElementById('res-momentum').textContent = data.momentum || '—';
+    document.getElementById('res-full').textContent     = data.full_analysis || '—';
+
+    // Calculate SL/TP levels for each style
+    const entry = data.entry_price;
+    const isBuy = dir === 'BUY';
+    const isForex = asset.includes('/') && !asset.includes('Index') && !asset.includes('Crash') && !asset.includes('Boom') && !asset.includes('Step') && !asset.includes('Range') && !asset.includes('Jump');
+    const decimals = entry > 10 ? 3 : 5;
+
+    // Use pip multipliers based on asset type
+    const pip = entry > 100 ? 0.01 : 0.0001;
+
+    // ── SCALPER (5–8 pip SL, 8–12 pip TP) ──
+    const scSL = isBuy ? entry - pip * 7  : entry + pip * 7;
+    const scTP = isBuy ? entry + pip * 11 : entry - pip * 11;
+    const scRR = '1:1.5';
+
+    // ── SWING (20–40 pip SL, 3 TPs) ──
+    const swSL  = isBuy ? entry - pip * 30  : entry + pip * 30;
+    const swTP1 = isBuy ? entry + pip * 50  : entry - pip * 50;
+    const swTP2 = isBuy ? entry + pip * 80  : entry - pip * 80;
+    const swTP3 = isBuy ? entry + pip * 120 : entry - pip * 120;
+
+    // ── TREND FOLLOWING (60–100 pip SL, 3 big TPs) ──
+    const trSL  = isBuy ? entry - pip * 80  : entry + pip * 80;
+    const trTP1 = isBuy ? entry + pip * 120 : entry - pip * 120;
+    const trTP2 = isBuy ? entry + pip * 220 : entry - pip * 220;
+    const trTP3 = isBuy ? entry + pip * 350 : entry - pip * 350;
+
+    const fmt = v => v.toFixed(decimals);
+
+    // Scalper
+    document.getElementById('sc-entry').textContent = fmt(entry);
+    document.getElementById('sc-sl').textContent    = fmt(scSL);
+    document.getElementById('sc-tp').textContent    = fmt(scTP);
+    setRRColor('rr-scalper', dir, '1:1.5');
+
+    // Swing
+    document.getElementById('sw-entry').textContent = fmt(entry);
+    document.getElementById('sw-sl').textContent    = fmt(swSL);
+    document.getElementById('sw-tp1').textContent   = fmt(swTP1);
+    document.getElementById('sw-tp2').textContent   = fmt(swTP2);
+    document.getElementById('sw-tp3').textContent   = fmt(swTP3);
+    setRRColor('rr-swing', dir, '1:2.5');
+
+    // Trend
+    document.getElementById('tr-entry').textContent = fmt(entry);
+    document.getElementById('tr-sl').textContent    = fmt(trSL);
+    document.getElementById('tr-tp1').textContent   = fmt(trTP1);
+    document.getElementById('tr-tp2').textContent   = fmt(trTP2);
+    document.getElementById('tr-tp3').textContent   = fmt(trTP3);
+    setRRColor('rr-trend', dir, '1:4+');
+
+    resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function setRRColor(id, dir, label) {
+    const el = document.getElementById(id);
+    el.textContent = `R:R ${label}`;
+    el.className = 'rr-badge ' + (dir === 'SELL' ? 'sell' : dir === 'NEUTRAL' ? 'neutral' : '');
+  }
+
+  // ── HISTORY ─────────────────────────────────────────
+  function addHistory(data, asset, tf) {
+    history.unshift({ data, asset, tf, time: new Date() });
+    if (history.length > 10) history.pop();
+    historySection.style.display = 'block';
+    historyList.innerHTML = history.map(h => `
+      <div class="history-item">
+        <div class="history-dot ${h.data.direction}"></div>
+        <div class="history-info">
+          <div class="h-asset">${h.asset} • ${h.tf}</div>
+          <div class="h-time">${h.time.toLocaleTimeString('pt-BR')}</div>
+        </div>
+        <div>
+          <div class="history-dir ${h.data.direction}">
+            ${h.data.direction === 'BUY' ? '▲ COMPRA' : h.data.direction === 'SELL' ? '▼ VENDA' : '◆ NEUTRO'}
+          </div>
+          <div class="history-conf">${h.data.confidence || 80}% força</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+</script>
+
+</body>
+</html>
